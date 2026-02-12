@@ -1,5 +1,4 @@
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
-import { HelpCircleIcon, SettingsIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function Navbar() {
@@ -33,30 +32,17 @@ export default function Navbar() {
           </SignedOut>
 
           <SignedIn>
-            <UserButton 
+            <UserButton
               appearance={{
                 elements: {
                   userButtonAvatarBox: "h-10 w-10",
                 }
               }}
-            >
-              <UserButton.MenuItems>
-                <UserButton.Link 
-                  label="Settings"
-                  labelIcon={<SettingsIcon />}
-                  href="/settings"
-                />
-                <UserButton.Action 
-                  label="Help"
-                  labelIcon={<HelpCircleIcon />}
-                  onClick={() => window.open('/help', '_blank')}
-                />
-              </UserButton.MenuItems>
-            </UserButton>
-            
+            />
+
             <div className="flex items-center gap-2 bg-white/45 px-2 py-1 rounded-full border border-white/40">
               <span className="hidden sm:block text-xs font-medium text-gray-800">
-                Welcome back!
+                Start Chating
               </span>
             </div>
           </SignedIn>

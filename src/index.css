@@ -7,12 +7,21 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: "Coolvetica";
+  src: url("assets/fonts/coolvetica.otf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
   --font-liquid: "Liquid Asi";
+  --font-coolvetica: "Coolvetica";
 }
 
 @theme inline {
   --font-liquid: var(--font-liquid);
+  --font-coolvetica: var(--font-coolvetica);
 }
 
 
