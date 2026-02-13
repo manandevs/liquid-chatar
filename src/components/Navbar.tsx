@@ -8,7 +8,7 @@ export default function Navbar() {
 
         <Link to="/" className="flex items-center gap-2 group pl-2">
           <img
-            src="/icons/favicon.svg"
+            src="/icons/favicon.png"
             alt="logo"
             className="h-6 md:h-8 w-auto group-hover:scale-110 transition-transform duration-200"
           />
@@ -39,12 +39,13 @@ export default function Navbar() {
                 }
               }}
             />
-
-            <div className="flex items-center gap-2 bg-white/45 px-2 py-1 rounded-full border border-white/40">
-              <span className="hidden sm:block text-xs font-medium text-gray-800">
-                Start Chating
-              </span>
-            </div>
+            <Link to={"/chat"}>
+              <div className="flex items-center gap-2 bg-white/45 px-2 py-1 rounded-full border border-white/40">
+                <span className="hidden sm:block text-xs font-medium text-gray-800">
+                  Start Chating
+                </span>
+              </div>
+            </Link>
           </SignedIn>
         </div>
       </div>

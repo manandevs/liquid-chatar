@@ -1,7 +1,7 @@
 export default function Features() {
   return (
     <section className="w-full px-2 font-liquid text-black">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
         
         {/* Card 1: Speed */}
         <div className="md:col-span-2 bg-white border border-white rounded-[2rem] p-8 md:p-10 relative overflow-hidden group">

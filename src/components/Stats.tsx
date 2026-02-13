@@ -1,7 +1,7 @@
 export default function Stats() {
   return (
     <section className="w-full px-2 py-4 font-liquid text-black">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1440px] mx-auto">
         <div className="bg-lime-200/50 border border-white/40 rounded-[2rem] p-6 md:p-12 overflow-hidden relative">
           
           <div className="flex flex-col md:flex-row justify-between items-center gap-8 md:gap-4 text-center md:text-left">

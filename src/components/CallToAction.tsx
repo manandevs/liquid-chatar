@@ -3,7 +3,7 @@ import { SignUpButton } from "@clerk/clerk-react";
 export default function CallToAction() {
   return (
     <section className="w-full px-2 py-4 pb-8 font-liquid text-black">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1440px] mx-auto">
         
         <div className="bg-white rounded-[2rem] p-12 md:p-24 text-center relative overflow-hidden shadow-sm border border-white">
           
@@ -11,7 +11,7 @@ export default function CallToAction() {
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-lime-300 rounded-full mix-blend-multiply filter blur-[64px] opacity-40 animate-pulse"></div>
           
           <div className="relative z-10 flex flex-col items-center justify-center space-y-8">
-            <h2 className="text-5xl md:text-8xl font-bold leading-[0.9] tracking-tight">
+            <h2 className="text-5xl md:text-8xl font-bold tracking-tight">
               Ready to get <br />
               <span className="text-lime-500 selection:bg-black selection:text-white">Liquid?</span>
             </h2>

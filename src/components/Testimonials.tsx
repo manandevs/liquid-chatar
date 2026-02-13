@@ -1,7 +1,7 @@
 export default function Testimonials() {
   return (
     <section className="w-full px-2 font-liquid text-black">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1440px] mx-auto">
         
         {/* Container: Looks like a glass chat window */}
         <div className="bg-white/20 backdrop-blur-md border border-white/40 rounded-[2rem] p-6 md:p-12 relative overflow-hidden">

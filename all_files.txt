@@ -1,0 +1,1654 @@
+=== D:\vite\liquid-chatar\.env.local ===
+# Deployment used by `npx convex dev`
+CONVEX_DEPLOYMENT=dev:rightful-dinosaur-812 # team: manandevs, project: liquid-chatar
+
+VITE_CONVEX_URL=https://rightful-dinosaur-812.convex.cloud
+
+VITE_CONVEX_SITE_URL=https://rightful-dinosaur-812.convex.site
+
+CLERK_JWT_ISSUER_DOMAIN=https://accepted-martin-71.clerk.accounts.dev
+
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_YWNjZXB0ZWQtbWFydGluLTcxLmNsZXJrLmFjY291bnRzLmRldiQ
+
+CLERK_WEBHOOK_SECRET=whsec_C4/J0rv+y0mTFCuTF78Jb+wPKxnCkgrN
+
+
+=== D:\vite\liquid-chatar\.gitignore ===
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+=== D:\vite\liquid-chatar\convex\auth.config.ts ===
+import { AuthConfig } from "convex/server";
+
+export default {
+  providers: [
+    {
+      // Replace with your own Clerk Issuer URL from your "convex" JWT template
+      // or with `process.env.CLERK_JWT_ISSUER_DOMAIN`
+      // and configure CLERK_JWT_ISSUER_DOMAIN on the Convex Dashboard
+      // See https://docs.convex.dev/auth/clerk#configuring-dev-and-prod-instances
+      domain: process.env.CLERK_JWT_ISSUER_DOMAIN!,
+      applicationID: "convex",
+    },
+  ]
+} satisfies AuthConfig;
+
+=== D:\vite\liquid-chatar\convex\http.ts ===
+import { httpRouter } from "convex/server";
+import { httpAction } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { Webhook } from "svix";
+
+const webhookSecret = process.env.CLERK_WEBHOOK_SECRET || "";
+
+async function validateRequest(request: Request) {
+  const payloadString = await request.text();
+  const svixHeaders = {
+    "svix-id": request.headers.get("svix-id")!,
+    "svix-timestamp": request.headers.get("svix-timestamp")!,
+    "svix-signature": request.headers.get("svix-signature")!,
+  };
+  const wh = new Webhook(webhookSecret);
+  return wh.verify(payloadString, svixHeaders) as any;
+}
+
+const handleClerkWebhook = httpAction(async (ctx, request) => {
+  const event = await validateRequest(request);
+  
+  if (!event) {
+    return new Response("Error occurred", { status: 400 });
+  }
+
+  switch (event.type) {
+    case "user.created":
+    case "user.updated": {
+      await ctx.runMutation(internal.users.createUser, {
+        clerkId: event.data.id,
+        email: event.data.email_addresses[0]?.email_address || "",
+        firstName: event.data.first_name,
+        lastName: event.data.last_name,
+        imageUrl: event.data.image_url,
+        username: event.data.username,
+      });
+      break;
+    }
+    case "user.deleted": {
+      await ctx.runMutation(internal.users.deleteUser, {
+        clerkId: event.data.id!,
+      });
+      break;
+    }
+    default: {
+      console.log("ignored Clerk webhook event", event.type);
+    }
+  }
+
+  return new Response(null, { status: 200 });
+});
+
+const http = httpRouter();
+
+http.route({
+  path: "/clerk-webhook",
+  method: "POST",
+  handler: handleClerkWebhook,
+});
+
+export default http;
+
+=== D:\vite\liquid-chatar\convex\schema.ts ===
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  users: defineTable({
+    clerkId: v.string(),
+    email: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    username: v.optional(v.string()),
+  }).index("by_clerk_id", ["clerkId"]),
+});
+
+=== D:\vite\liquid-chatar\convex\users.ts ===
+import { v } from "convex/values";
+import { internalMutation, query } from "./_generated/server";
+
+export const createUser = internalMutation({
+  args: {
+    clerkId: v.string(),
+    email: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    username: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("users", {
+      clerkId: args.clerkId,
+      email: args.email,
+      firstName: args.firstName,
+      lastName: args.lastName,
+      imageUrl: args.imageUrl,
+      username: args.username,
+    });
+  },
+});
+
+export const updateUser = internalMutation({
+  args: {
+    clerkId: v.string(),
+    email: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    username: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        email: args.email,
+        firstName: args.firstName,
+        lastName: args.lastName,
+        imageUrl: args.imageUrl,
+        username: args.username,
+      });
+    }
+  },
+});
+
+export const deleteUser = internalMutation({
+  args: { clerkId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+
+    if (user) {
+      await ctx.db.delete(user._id);
+    }
+  },
+});
+
+export const getUserByClerkId = query({
+  args: { clerkId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+  },
+});
+
+=== D:\vite\liquid-chatar\convex\_generated\api.d.ts ===
+/* eslint-disable */
+/**
+ * Generated `api` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import type * as http from "../http.js";
+import type * as users from "../users.js";
+
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+
+declare const fullApi: ApiFromModules<{
+  http: typeof http;
+  users: typeof users;
+}>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
+
+export declare const components: {};
+
+
+=== D:\vite\liquid-chatar\convex\_generated\api.js ===
+/* eslint-disable */
+/**
+ * Generated `api` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import { anyApi, componentsGeneric } from "convex/server";
+
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export const api = anyApi;
+export const internal = anyApi;
+export const components = componentsGeneric();
+
+
+=== D:\vite\liquid-chatar\convex\_generated\dataModel.d.ts ===
+/* eslint-disable */
+/**
+ * Generated data model types.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import type {
+  DataModelFromSchemaDefinition,
+  DocumentByName,
+  TableNamesInDataModel,
+  SystemTableNames,
+} from "convex/server";
+import type { GenericId } from "convex/values";
+import schema from "../schema.js";
+
+/**
+ * The names of all of your Convex tables.
+ */
+export type TableNames = TableNamesInDataModel<DataModel>;
+
+/**
+ * The type of a document stored in Convex.
+ *
+ * @typeParam TableName - A string literal type of the table name (like "users").
+ */
+export type Doc<TableName extends TableNames> = DocumentByName<
+  DataModel,
+  TableName
+>;
+
+/**
+ * An identifier for a document in Convex.
+ *
+ * Convex documents are uniquely identified by their `Id`, which is accessible
+ * on the `_id` field. To learn more, see [Document IDs](https://docs.convex.dev/using/document-ids).
+ *
+ * Documents can be loaded using `db.get(tableName, id)` in query and mutation functions.
+ *
+ * IDs are just strings at runtime, but this type can be used to distinguish them from other
+ * strings when type checking.
+ *
+ * @typeParam TableName - A string literal type of the table name (like "users").
+ */
+export type Id<TableName extends TableNames | SystemTableNames> =
+  GenericId<TableName>;
+
+/**
+ * A type describing your Convex data model.
+ *
+ * This type includes information about what tables you have, the type of
+ * documents stored in those tables, and the indexes defined on them.
+ *
+ * This type is used to parameterize methods like `queryGeneric` and
+ * `mutationGeneric` to make them type-safe.
+ */
+export type DataModel = DataModelFromSchemaDefinition<typeof schema>;
+
+
+=== D:\vite\liquid-chatar\convex\_generated\server.d.ts ===
+/* eslint-disable */
+/**
+ * Generated utilities for implementing server-side Convex query and mutation functions.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import {
+  ActionBuilder,
+  HttpActionBuilder,
+  MutationBuilder,
+  QueryBuilder,
+  GenericActionCtx,
+  GenericMutationCtx,
+  GenericQueryCtx,
+  GenericDatabaseReader,
+  GenericDatabaseWriter,
+} from "convex/server";
+import type { DataModel } from "./dataModel.js";
+
+/**
+ * Define a query in this Convex app's public API.
+ *
+ * This function will be allowed to read your Convex database and will be accessible from the client.
+ *
+ * @param func - The query function. It receives a {@link QueryCtx} as its first argument.
+ * @returns The wrapped query. Include this as an `export` to name it and make it accessible.
+ */
+export declare const query: QueryBuilder<DataModel, "public">;
+
+/**
+ * Define a query that is only accessible from other Convex functions (but not from the client).
+ *
+ * This function will be allowed to read from your Convex database. It will not be accessible from the client.
+ *
+ * @param func - The query function. It receives a {@link QueryCtx} as its first argument.
+ * @returns The wrapped query. Include this as an `export` to name it and make it accessible.
+ */
+export declare const internalQuery: QueryBuilder<DataModel, "internal">;
+
+/**
+ * Define a mutation in this Convex app's public API.
+ *
+ * This function will be allowed to modify your Convex database and will be accessible from the client.
+ *
+ * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
+ * @returns The wrapped mutation. Include this as an `export` to name it and make it accessible.
+ */
+export declare const mutation: MutationBuilder<DataModel, "public">;
+
+/**
+ * Define a mutation that is only accessible from other Convex functions (but not from the client).
+ *
+ * This function will be allowed to modify your Convex database. It will not be accessible from the client.
+ *
+ * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
+ * @returns The wrapped mutation. Include this as an `export` to name it and make it accessible.
+ */
+export declare const internalMutation: MutationBuilder<DataModel, "internal">;
+
+/**
+ * Define an action in this Convex app's public API.
+ *
+ * An action is a function which can execute any JavaScript code, including non-deterministic
+ * code and code with side-effects, like calling third-party services.
+ * They can be run in Convex's JavaScript environment or in Node.js using the "use node" directive.
+ * They can interact with the database indirectly by calling queries and mutations using the {@link ActionCtx}.
+ *
+ * @param func - The action. It receives an {@link ActionCtx} as its first argument.
+ * @returns The wrapped action. Include this as an `export` to name it and make it accessible.
+ */
+export declare const action: ActionBuilder<DataModel, "public">;
+
+/**
+ * Define an action that is only accessible from other Convex functions (but not from the client).
+ *
+ * @param func - The function. It receives an {@link ActionCtx} as its first argument.
+ * @returns The wrapped function. Include this as an `export` to name it and make it accessible.
+ */
+export declare const internalAction: ActionBuilder<DataModel, "internal">;
+
+/**
+ * Define an HTTP action.
+ *
+ * The wrapped function will be used to respond to HTTP requests received
+ * by a Convex deployment if the requests matches the path and method where
+ * this action is routed. Be sure to route your httpAction in `convex/http.js`.
+ *
+ * @param func - The function. It receives an {@link ActionCtx} as its first argument
+ * and a Fetch API `Request` object as its second.
+ * @returns The wrapped function. Import this function from `convex/http.js` and route it to hook it up.
+ */
+export declare const httpAction: HttpActionBuilder;
+
+/**
+ * A set of services for use within Convex query functions.
+ *
+ * The query context is passed as the first argument to any Convex query
+ * function run on the server.
+ *
+ * This differs from the {@link MutationCtx} because all of the services are
+ * read-only.
+ */
+export type QueryCtx = GenericQueryCtx<DataModel>;
+
+/**
+ * A set of services for use within Convex mutation functions.
+ *
+ * The mutation context is passed as the first argument to any Convex mutation
+ * function run on the server.
+ */
+export type MutationCtx = GenericMutationCtx<DataModel>;
+
+/**
+ * A set of services for use within Convex action functions.
+ *
+ * The action context is passed as the first argument to any Convex action
+ * function run on the server.
+ */
+export type ActionCtx = GenericActionCtx<DataModel>;
+
+/**
+ * An interface to read from the database within Convex query functions.
+ *
+ * The two entry points are {@link DatabaseReader.get}, which fetches a single
+ * document by its {@link Id}, or {@link DatabaseReader.query}, which starts
+ * building a query.
+ */
+export type DatabaseReader = GenericDatabaseReader<DataModel>;
+
+/**
+ * An interface to read from and write to the database within Convex mutation
+ * functions.
+ *
+ * Convex guarantees that all writes within a single mutation are
+ * executed atomically, so you never have to worry about partial writes leaving
+ * your data in an inconsistent state. See [the Convex Guide](https://docs.convex.dev/understanding/convex-fundamentals/functions#atomicity-and-optimistic-concurrency-control)
+ * for the guarantees Convex provides your functions.
+ */
+export type DatabaseWriter = GenericDatabaseWriter<DataModel>;
+
+
+=== D:\vite\liquid-chatar\convex\_generated\server.js ===
+/* eslint-disable */
+/**
+ * Generated utilities for implementing server-side Convex query and mutation functions.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
+
+import {
+  actionGeneric,
+  httpActionGeneric,
+  queryGeneric,
+  mutationGeneric,
+  internalActionGeneric,
+  internalMutationGeneric,
+  internalQueryGeneric,
+} from "convex/server";
+
+/**
+ * Define a query in this Convex app's public API.
+ *
+ * This function will be allowed to read your Convex database and will be accessible from the client.
+ *
+ * @param func - The query function. It receives a {@link QueryCtx} as its first argument.
+ * @returns The wrapped query. Include this as an `export` to name it and make it accessible.
+ */
+export const query = queryGeneric;
+
+/**
+ * Define a query that is only accessible from other Convex functions (but not from the client).
+ *
+ * This function will be allowed to read from your Convex database. It will not be accessible from the client.
+ *
+ * @param func - The query function. It receives a {@link QueryCtx} as its first argument.
+ * @returns The wrapped query. Include this as an `export` to name it and make it accessible.
+ */
+export const internalQuery = internalQueryGeneric;
+
+/**
+ * Define a mutation in this Convex app's public API.
+ *
+ * This function will be allowed to modify your Convex database and will be accessible from the client.
+ *
+ * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
+ * @returns The wrapped mutation. Include this as an `export` to name it and make it accessible.
+ */
+export const mutation = mutationGeneric;
+
+/**
+ * Define a mutation that is only accessible from other Convex functions (but not from the client).
+ *
+ * This function will be allowed to modify your Convex database. It will not be accessible from the client.
+ *
+ * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
+ * @returns The wrapped mutation. Include this as an `export` to name it and make it accessible.
+ */
+export const internalMutation = internalMutationGeneric;
+
+/**
+ * Define an action in this Convex app's public API.
+ *
+ * An action is a function which can execute any JavaScript code, including non-deterministic
+ * code and code with side-effects, like calling third-party services.
+ * They can be run in Convex's JavaScript environment or in Node.js using the "use node" directive.
+ * They can interact with the database indirectly by calling queries and mutations using the {@link ActionCtx}.
+ *
+ * @param func - The action. It receives an {@link ActionCtx} as its first argument.
+ * @returns The wrapped action. Include this as an `export` to name it and make it accessible.
+ */
+export const action = actionGeneric;
+
+/**
+ * Define an action that is only accessible from other Convex functions (but not from the client).
+ *
+ * @param func - The function. It receives an {@link ActionCtx} as its first argument.
+ * @returns The wrapped function. Include this as an `export` to name it and make it accessible.
+ */
+export const internalAction = internalActionGeneric;
+
+/**
+ * Define an HTTP action.
+ *
+ * The wrapped function will be used to respond to HTTP requests received
+ * by a Convex deployment if the requests matches the path and method where
+ * this action is routed. Be sure to route your httpAction in `convex/http.js`.
+ *
+ * @param func - The function. It receives an {@link ActionCtx} as its first argument
+ * and a Fetch API `Request` object as its second.
+ * @returns The wrapped function. Import this function from `convex/http.js` and route it to hook it up.
+ */
+export const httpAction = httpActionGeneric;
+
+
+=== D:\vite\liquid-chatar\eslint.config.js ===
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+    },
+  },
+])
+
+
+=== D:\vite\liquid-chatar\index.html ===
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>liquid-chatar</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+
+=== D:\vite\liquid-chatar\list-files.cjs ===
+const fs = require('fs');
+const path = require('path');
+
+// Folders to ignore
+const IGNORED_FOLDERS = new Set(['node_modules', '.next', 'dist', '.git', 'out', 'public', 'ui']);
+
+// Specific files to ignore
+const IGNORED_FILES = new Set(['README.md', 'package-lock.json', 'all_files.txt']);
+
+// File extensions to ignore (e.g., image types)
+const IGNORED_EXTENSIONS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico', '.tiff', '.psd', '.json', 'mjs'
+]);
+
+// Recursive function to get all files
+function listFiles(dirPath, fileList = []) {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+
+        if (entry.isDirectory()) {
+            if (!IGNORED_FOLDERS.has(entry.name)) {
+                listFiles(fullPath, fileList);
+            }
+        } else {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (!IGNORED_FILES.has(entry.name) && !IGNORED_EXTENSIONS.has(ext)) {
+                fileList.push(fullPath);
+            }
+        }
+    }
+
+    return fileList;
+}
+
+// ✅ Target directory (current folder)
+const targetDir = path.resolve(__dirname, './');
+const outputFile = path.join(__dirname, 'all_files.txt');
+
+const files = listFiles(targetDir);
+
+// Create write stream
+const writeStream = fs.createWriteStream(outputFile, { flags: 'w' });
+
+files.forEach(file => {
+    try {
+        const content = fs.readFileSync(file, 'utf8');
+        writeStream.write(`=== ${file} ===\n`);
+        writeStream.write(content + '\n\n');
+    } catch (err) {
+        writeStream.write(`Could not read file ${file}: ${err.message}\n\n`);
+    }
+});
+
+writeStream.end(() => {
+    console.log(`✅ All file names and contents written to: ${outputFile}`);
+});
+
+
+=== D:\vite\liquid-chatar\src\App.tsx ===
+// src/App.tsx
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { SignIn } from "@clerk/clerk-react";
+import Home from "./pages/Home";
+import Chat from "./pages/Chat";
+import { Routes, Route } from "react-router-dom"; // Fixed import order
+
+function App() {
+  return (
+    <main>
+      {/* 1. Loading State */}
+      <AuthLoading>
+        <div className="h-screen w-full bg-lime-400 flex flex-col items-center justify-center font-liquid gap-4">
+          <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-black font-bold text-xl animate-pulse">
+            Loading Liquid...
+          </p>
+        </div>
+      </AuthLoading>
+
+      {/* 2. Authenticated State (Logged In) */}
+      <Authenticated>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route
+            path="*"
+            element={
+              <h1 className="text-center mt-10 text-2xl">
+                404 - Page Not Found
+              </h1>
+            }
+          />
+        </Routes>
+      </Authenticated>
+
+      {/* 3. Unauthenticated State (Logged Out) - THIS WAS MISSING */}
+      <Unauthenticated>
+        <div className="h-screen w-full flex items-center justify-center bg-gray-100">
+          <SignIn />
+        </div>
+      </Unauthenticated>
+    </main>
+  );
+}
+
+export default App;
+
+=== D:\vite\liquid-chatar\src\assets\fonts\liquid-asi.ttf ===
+     �  `FFTM��1  5�   GDEF    5x   OS/2Y�dY  h   `cmap̑��  P  Bcvt  !y  �   gasp��   5p   glyf
+�hr  `  -head-�$   �   6hhea�X  $   $hmtxs2  �  �loca)��  �   �maxp � �  H    nameD#��  2x  post	z	b  4�   �      ���_<� �    �%�    婛N �Sz�             ��S Z�    z                b    b �             @ .     ��   ��   ���  � 1                        PfEd �   ~ �8 Z� �       �D     l !    M   �   � &� $� "� !� #� "� $> $? "@ $� !� "� $ � &8  � $9 !� $� "� #� $� $�  � "� " � $� � "� $� $�  � #� '� '� %� '� '� '� %� ' � '�  � '� &� '� '� %� '� %� '� !� � &� #� &� $� !�  @ &8  A "< "� &� "� � '� #� #� #� %� � ' � &� J '� &� %� %� #� '� #� %� !� � &M &� &� #� #� #�   � &� "� "               <                ~��    ����                                    	
+ !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`a                                                                                                                                    !y   * * * * L ~ �J�>Z���2Nfx��T��:��.����:��(t��	6	l	�	�
+
+F
+�
+�
+�(n�^��`��:���*B^��.t�&r���.N��T��"Z��H��
+"\�    !  *�   .� /<� �2��<� �2 � /<� �2��<� �23!'3#!	�����f!X   &   �E    462"&"&462&1E11E1�1E11E-�#11#�<#11�E11E1  $��G     462""&462$462""&4621E11E11E11E��1F11F11E11E�E11E11E11E11E11E11E11E1   "  gE C G  "&46;"&4623"&462462+462+2"&=#2"&="&46;%#3�1E11#�#11F1�#11E11F11#T1F11#�"11E1�#11F11E11#SO��J#11E11F11#T1F11#�"11E1�#11F11E11#S1E11#�#11F1��  !�hf� S  !#"&4&"&4623!264&#!"&4&"&462646;5462322"&4&#!"3!22"+"&5pT#11E11E11#O"11"��#11E11E11#T1E1T"11F11F11"��#11#O"11F11F11"T1E11E11F11F11F11E11E11F1S#11#S1F11E11E11E11E11F11E1D"11"   #  hE   + 7 _  46;2+"&57#2463"&+"&=46;2"&5#246462"""""&462646264626462#1#�#11#�#1�1""11##1�1#�#11#�#1T#11""1111F11F11E11E11F11E11E11F11E11E�#11#�#11#�#11""11�-�#11#�#11w1##11""1'F11F11E11E11F11E11E11F11E11E1    "  gE ; G S  4&"&462646;22"26462"2"&4&"+"&4&"&462";264&#264&+"3�1E11E11#�#11E11E11E11F11F11F11F11E11#�#11E11E�#11#�#11##11#�#11#�E11E11F11F11E11E11E11E11F11E11E11E11E11F1N1E11E1�
+1F11F1    $�sG   462""&462�1F11F11E11E�E11E11E11E1   $  E #  6"&5462646;2+";2+"&4�E11E11#�#11#�#11#�#11#�#1�1#O"11F11F11"��#11E11E  "  E #  $"+"&46;2654&+"&46;22�E11#�#11#�#11#�#11#�#11E1�1E11E11#O"11F11F11"��#     $PG '  4&"&46226462"2"&4&""&462�1E11E11F11E11E11E11E11F11E11E)E11E11E11E11E11E11E22E11E22E1   !  fE '  +"&463!"&=46246;2#!2"&5p1#�#11#N"11E11#�#11#��#11E1�"11E11#�#11#��#11E11#�#11#  "�Xq �   6462""&462�1F11F11E11E1E11E11E11E1    $\�   !2#!"&46x�"11"�
+#111F11F1    &   � �   2"&462�E11E11E11E        E    462"""&46265462o1E11E11F11E11E11F�F11F11"��#11E11E11#O"1    $  �E  /  462646;22"+"&4&"&5";2654&#$1E11#�#11E11E11#�#11E1�#11#�#11#J"11F11F11"��#11E11E11#�1"��#11#O"1   !  E   #"&46;232#!"&46;�S#11#�#1S#11#��#11#S�1F11#��1E11E1   $  iE 0  !"&463!22"#!"!2#!"&=4626463!264&n�
+#11#�"11F11F11"��#1J#11#�c#11E11#O"11�1F11F11E11E11#T1E11#�#11E11E1    "  gE C  ""&4626463!22"2"#!"&4&"&4623!264&+"&46;264&##11E11E11#O"11F11F11F11F11"��#11E11E11#O"11"�"11"�"11"�1E11E11F11F11E11E11F11E11E11F11F11F11E11E1  # hG 0  46264626462""!46232+"&=!"&5#1E11F11E11E11F1O1E1T#11#T1E1�^#1�#11E11E11E11E11#T�"11"�]1E1T"11"T1#   $  iE 0  54626463!2#!"!22"#!"&463!264&#!"&$1E11#P"11"��#1�"11F11F11"�
+#11#�"11"�
+#1��"11F11F11"T1E11F11E11E11F11     $  iE 0 ;  !"&4&"&54626463!22"&4&#!"!22"#3!264&##11E11E11#O"11F11F11"��#1�"11F11F11"�]1#O"11"1E11#O"11F11F11E11E11"T1E11F11E1OT#11F1      eE +   4&#!"&463!22""""&46264626462�1"�
+#11#�"11F11F11E11E11F11F11E11E'E11F11F11E11E11F11E11E11F11E1    "  gE + 7 C  4&"&4626463!22"2"#!"&4&"&462"3!264&#!"3!264&�1E11E11#O"11F11F11F11F11"��#11E11E�#11#O"11"��#11#O"11�E11E11F11F11E11E11F11E11E11F1N1E11E1��1F11F1   "  gE 0 ;  "&4&"&4626463!22"#!"&4&"&4623!26= 3!54&#!"#11E11E11#O"11F11F11"��#11E11E11#O"1�
+1#�1"��#O1E11E11F11F11"��#11E11E11F11F11#TE1T"1     $   ��    2"&4622"&4�E11E1vE11E11E11E�1E11E  �[n�    "&4626462"2"&4�1E11E11F11FF11F1.F11F11E11E1�1F11F  " �q�    "2"&4&"&4626462q1F11F11F11E11E11FuE11F11E11E11F11E1  $ ���    2#!"&4632#!"&463n"11"�
+#11#�"11"�
+#11#@1F11F1N1E11E1  $ �s�   4622""&46264&"$1E11F11F11E11E11E1F11F11E11E11E11E1      eE  4  $"&462264&#!""&4626463!22"+"&=463o1F11F,"11"��#11E11E11#O"11F11F11"�1F11#vE11E1O1E11E11E11F11F11E11E1'#11#z#1     #  hE 8 C  4626463!22"+.54&"&462646;54&#!""&526=#"3#1E11#O"11F11F11"�1F11F11"�1"��#11E1J"1�"11"J"11F11F11"��#11E1"11F11E1T"11"�"11"�1#T1F1    '  lE  /  74626463!22"&4&#!""&"463!24&#'1E11#O"11F11F11"��#11E1�#11#O"11"T�"11F11F11"�
+#11E11E11l1"��#11#O"1    '  lE ! , 4  3"&54626463!22"2"#!264&#!"!264&#{#11E11#O"11F11F11F11F11"�]�"11"��#1�"11"1#�"11F11F11E11E11F11E1JT1E11��1F1  %  jE 3  6"&54626463!22"&4&#!"3!26462"#!"&4�E11E11#O"11F11F11"��#11#O"11F11F11"��#1�1#O"11F11F11E11E11"��#11F11F11E11E  '  lE  (  3"&54626463!22"#!2654&#!"{#11E11#O"11F11F11"�]�"11"��#11#�"11F11F11"��#11E1J�]1#O"11     '  lE *  3"&54626463!2#!"463!2#!"!2#{#11E11#�#11#�
+#11#O"11"��#1J#11#1#�"11F11F11"�#11E11#T1E1   '  lE %  7"&54626463!2#!"463!2#!"�1E11E11#�#11#�
+#11#O"11"��#1��#11#�"11F11F11"�#11E11  %  jE ;  74626463!22"&4&#!"3!264&"&4622"#!"&4&"&%1E11#O"11F11F11"��#11#O"11E11E11F11F11"��#11E1�O"11F11F11E11E11"��#11F11E11E11F11E11E11     '  lE '  7"&5462463!26=462"&5#!"�1E11E11#O"11F11F11"��#1��#11#�#11#��#11#�#11#�c#11#N"11     '   �E   462"&5'1E11E1�#11#�c#11#        �E $  64&"&462;265#"&46;2"+"�1E11E11#�#1T"11"�"11E11#�#1E11F11F11#�1F11#�
+#11E1   '  �E +  "&5462326=462"2"&=4&#�1E11E1�#11E11E11E11E11#O�#11#�#11#�1#�#11#�#11E11#�#11#�#1   &  �E   6"&54623!2#!"&4�E11E11#O"11"��#1�1#�#11#�
+#11E11E    '  lE 3  74626462264622"&54&""&54&""&'1E11F11E11E11F11F11E11E11F11E1T�"11F11F11F11F11"�
+#11#�"11"��#11#O"11"�
+#11     '  lE #  !""&54626463!22"&54&q��#11E11E11#O"11F11F11�1"�
+#11#�"11F11F11"�
+#11#�"1   %  jE  /  $#!"&4&"&54626463!22"3!2654&#!"�1"��#11E11E11#O"11F11F��1#O"11"��#1vE11E11#O"11F11F11"��#1���#11#O"11  '  lE  /  6"&54626463!22"#!"463!26=4&#!"�1E11E11#O"11F11F11"��#11#O"11"��#1vE11#�"11F11F11"�"11F1���#11"�"11  %  jE + G  !"&4&"&54626463!22"2"&4&"#";264&"&46226=4&# #11E11E11#O"11F11F11F11F11E11#�#11#�#11E11E11E11"1E11#O"11F11F11"�"11F11E11E11E1�1"��#11F11E11E11"�"1    '  lE ' 4  7"&54626463!22+2"&4&#!26=4&#!"�1E11E11#O"11F11#T1F11F11"�]�"11"��#1�S#11#�"11F11F11"�"1T#11E11E1��1"�"11   !  fE C  "&4626463!22"&4&#!"3!22"#!"&4&"&4623!264&#!"&4�E11E11#O"11F11F11"��#11#O"11F11F11"��#11E11E11#O"11"��#1�1E11F11F11E11E11E11E11F11E11E11F11F11F11E       bE   #"&463!2#!2"&54&�#11#�#11#��#11E11�1F11F11"�
+#11#�"1     &  kE #  "#!"&4&"&54623!265462k1F11"��#11E11E11#O"11F1��
+#11E11E11#�#11#�
+#11#�#11   #  hE /  "&546222646265462"""&4&"&4�E11E11F11E11E11F11F11E11E11F1O1"O#11#��"11F11F11"O#11#��"11F11E11E11F   &  kE 3  $"&4&"&546226=462265462""&4&"u1F11E11E11F11E11E11F11F11E11EvE11E11#�#11#�
+#11#�#11#�#11#�#11#�
+#11E11E1   $  iE ;  "&=4623!26=462"2"&=4&#!""&=46264�E11E11#O"11F11F11F11F11"��#11E11E1�1#�#11#�#11#�#11#�#11E11#�#11#�#11#�#11#�#11E     !  fE /   ""&=463#"&4&"&=4623!26=462"�E11E11"�#11E11E11#O"11F11F1O1#�#11#�#11E11#�#11#�#11#�#11#�#11E        eE 4   4&#!"&463!22+#!"3!2#!"&4&"&4626463!2�1"�
+#11#�"11F11#T1"��#11#�#11#�
+#11E11E11#O"'E11F11F11E1T"11F11E11E11F11E1   &  E   3"&5463!2+"&546;2#z#11#N#11#�#11#�#11#1#�#11F11#�c"11E1        E   22"&4&"&54&"&462�1F11E11E11F11E11EF11"��#11E11E11#O"11F1     "  E   )"&46;2+"&463!2���#11#�#11#�#11#N#111E11"�#11F11#�c#1   "Q   "&46264622"&4&"�E11E11F11E11E11F11E11F11F11E11E11E   &  k �   %2#!"&463#11#�c#11#�1E11E1     "�qG   4&"&4622"�1E11E11F11F)E11E11E11E1     �� + 7  6"&462646;2463"&5"&46;2"&5+"&4%#";264&�F22F22#�#22##22F22#�#22F22#�#2 �#22#�#22�2G22F22##22##22F22#�#22##22F�2G22G2   '  �T " 2  746246;22"+"&5"&;26=4&+"'2F22#�#22F22F22#�#22F2�2#�#22#�#2U�$22$�#22F22#�#22F22##22x�#22#�#22    #  �� +  462646;22"&4&+"3!2#!"&4&"&5#2F22#�#22F22F22#�#22#U#22#��#22F2�#22F22F22F22F22#�#22F22F22#    #  �T " 2  %"&5+"&4&"&=462646;254624&+";265�2F22#�#22F22F22#�#22F2�2#�#22#�#2U#22##22F22#�#22F22#�$22$��#22#�#22#    #  �� & 6  5462646372322"#32#!"&4&"&2646264&+"#2F22#�#22F22F22#�#22#��#22F2�G22F22#�#2 ��#22F22F22F22G22F22F2222G22F22#�#   %�Sz� �  7"&54626463!2#!"191U46;2+"�2F22F22# #22#� #22#W#22#W#2S�$11$�#22F22F22#$22G22    �V�� + 7  "&462646;22"+"&46;26=+"&4%#";264&�F22F22#�#22F22F22#�#22#�#22#�#2 �#22#�#22U2F22G22G22#��#22F22F22#�#22F�2F22F2  '  �T %  "&546246;22"&54&+"�2F22F22#�#22F22F22#�#2���#22#�$22$�#22F22#��#22#U#22  &   �G    7462"&462"&2F22F22F22FU�#22#�T#22�G22G2   �UqG    462"""&46265462�2G22GGG22F22F22G2�G11G2�d2G11G22#�#22#�Y#  '  &T '  "&5462326462"2"&=4&#�2F22F2U$22F22F22F22F22$U� #22#�$22$�2F22F22F22$�#22#�$2  &  {T   6"&54622"&4�F22F22G22G2�2#�$22$�#22F22F  %  y� 3  26462264622"&54&""&=4&""&54WF22G22F22F22G22G22F22F22G22F2�2F22F22F22F22#��#22#U#22#�#22#�#22#��#22#U#   %  �� #  "&5462646;22"&54&+"�2F22F22#�#22F22F22#�#2���#22#U#22F22F22#��#22#U#22  #  ��  /  462646;22"+"&4&"&5";26=4&##2F22#�#22F22F22#�#22F2 �#22#�#22#�#22F22F22#�#22F22F22# 2#�#22#�#2     '�U�� " 2  46246;22"+"&5"&5;26=4&+"'2F22#�#22F22F22#�#22F2�2#�#22#�#2T#22##22F22#�#22F22#�#22#T#22#�#22#    #�U�� " 2  "&=+"&4&"&=462646;246254&+";26�2F22#�#22F22F22#�#22F2�2#�#22#�#2T�W#22#�#22F22#�#22F22##22���#22#�#22  %  �� '  "&5462646;22""&46264&+"�2F22F22#�#22F22F22F22F22#�#2���#22#U#22F22F22F22G22G22F22    !  �� 7  "&4626463!2#!"264622"#!"&463!264&""&4�F22F22#U#22#��#22G22F22F22F22#��#22#U#22F22G2U2F22F22F22F22F22F22G22F22F22G22G22G     �T '  #"&46;546232+;2+"&4&"&5�U#22#U2G2U#22#U2#�#22#�#22G2�2F2U$22$U2F2� #22F22F22#     &  �� #  !#"&4&"&5462;265462"Ы#22F22F22#�#22F22F222F22#U#22#��#22#U#22#��#22F2   &  %�   462265462""&4&"&&2F22G22F22F22G22F2 �U#22#��#22#U#22#��#22F22F22  &  z� /  46226462265462""&4&""&4&"&5&2F22G22F22F22G22G22F22F22G22F2T#22#��#22G22G22#U#22#��#22F22F22F22F22#   #  �� 3  264&"&462;26462"2"&=4&+""&=4UF22F22F22#�#22F22F22F22F22#�#22F2U2F22F22F22F22F22F22$�#22#�$22$�#22#�$   #�U�� 1  "&=462;26=462"+"&46;26=+"&4�F22F22#�#22F22F22#�#22#�#22#�#2U2#�#22#�#22#�#22#�#22F22F22#�#22G  #  �� 1   ""#!5462#!"&46264626463!"&=463!2�F22F22$ 2F22#�#22F22G22#� 2F22#�#2�2F22G2U$22$�#22F22G22F2U#22#�#22F       �E )  "&4626=463!2+"232#!"&=4�E11E11#O"11"�1F11F1�"11"��#1O1E11#�#11F1S#11E11#T1E11#�#   &�� ��   462"&5&1E11E1;#11#��#11#     "  �E )   "#!"&46;546264&"&=#"&463!22�E11#��#11#�1E11E1�#11#N#11E1O1#�#11E1T#11E11#S1F11#�#11E  " ��K   6"&462646226462""&4&"�E11E11F11E11E11E11E11F1�1E11F11F11F11F11E11E11E      �         6       	 e               $ �       	
+       4       	X  	   4    	   Q  	   o  	  H �  	   �  	    	  D C o p y r i g h t   ( c )   2 0 2 6 ,   J V M I Y O  Copyright (c) 2026, JVMIYO  L I Q U I D A S I  LIQUIDASI  R e g u l a r  Regular  F o n t F o r g e   2 . 0   :   L I Q U I D A S I   :   5 - 2 - 2 0 2 6  FontForge 2.0 : LIQUIDASI : 5-2-2026  L I Q U I D A S I  LIQUIDASI  V e r s i o n   0 0 1 . 0 0 0  Version 001.000  L I Q U I D A S I  LIQUIDASI        �� 2                     b           	 
+                        ! " # $ % & ' ( ) * + , - . / 0 1 2 3 4 5 6 7 8 9 : ; < = > ? @ A B C D E F G H I J K L M N O P Q R S T U V W X Y Z [ \ ] ^ _ ` a     ��                             ���1    �%�    婛N
+
+=== D:\vite\liquid-chatar\src\components\CallToAction.tsx ===
+import { SignUpButton } from "@clerk/clerk-react";
+
+export default function CallToAction() {
+  return (
+    <section className="w-full px-2 py-4 pb-8 font-liquid text-black">
+      <div className="max-w-[1440px] mx-auto">
+        
+        <div className="bg-white rounded-[2rem] p-12 md:p-24 text-center relative overflow-hidden shadow-sm border border-white">
+          
+          {/* Background Blobs */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-lime-300 rounded-full mix-blend-multiply filter blur-[64px] opacity-40 animate-pulse"></div>
+          
+          <div className="relative z-10 flex flex-col items-center justify-center space-y-8">
+            <h2 className="text-5xl md:text-8xl font-bold tracking-tight">
+              Ready to get <br />
+              <span className="text-lime-500 selection:bg-black selection:text-white">Liquid?</span>
+            </h2>
+            
+            <p className="text-xl md:text-2xl text-gray-500 max-w-lg">
+              Join the new wave of messaging. No clutter, just flow.
+            </p>
+
+            <SignUpButton mode="modal">
+              <button className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-black rounded-2xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 hover:scale-105 active:scale-95 cursor-pointer">
+                Get Started Now
+                <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+              </button>
+            </SignUpButton>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\FAQ.tsx ===
+import { useState } from "react";
+
+const questions = [
+  {
+    question: "Is my data really liquid... and secure?",
+    answer: "Absolutely. We use AES-256 encryption for all messages. 'Liquid' refers to our UI philosophy, not a security leak! Your chats are locked tight."
+  },
+  {
+    question: "Does it work on mobile?",
+    answer: "Yes! The design is fully responsive. It flows perfectly into any screen size, from an iPhone Mini to a 34-inch ultra-wide monitor."
+  },
+  {
+    question: "What is the file limit on the Free plan?",
+    answer: "You can send files up to 100MB per transfer on the Free plan. Pro users get up to 4GB per file (perfect for 4K video)."
+  },
+  {
+    question: "Can I customize the colors?",
+    answer: "Pro members can unlock 'Chameleon Mode' which adapts the UI colors to your wallpaper or mood. Free users get our signature Lime & Black theme."
+  }
+];
+
+export default function FAQ() {
+  const [openIndex, setOpenIndex] = useState(null);
+
+  const toggleFAQ = (index:any) => {
+    setOpenIndex(openIndex === index ? null : index);
+  };
+
+  return (
+    <section className="w-full px-2 py-4 font-liquid text-black">
+      <div className="max-w-3xl mx-auto">
+        
+        {/* Header */}
+        <div className="text-center mb-10 relative">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-lime-300 rounded-full blur-3xl opacity-50"></div>
+          <h2 className="text-4xl md:text-5xl font-bold relative z-10">Got Questions?</h2>
+        </div>
+
+        <div className="space-y-4">
+          {questions.map((q, index) => (
+            <div 
+              key={index}
+              onClick={() => toggleFAQ(index)}
+              className={`
+                group cursor-pointer rounded-[2rem] border transition-all duration-300 overflow-hidden relative
+                ${openIndex === index 
+                  ? "bg-white border-white shadow-lg scale-[1.02]" 
+                  : "bg-white/20 border-white/40 hover:bg-white/40 hover:border-white/60"
+                }
+              `}
+            >
+              {/* Question Header */}
+              <div className="p-6 md:p-8 flex justify-between items-center">
+                <h3 className={`text-lg md:text-xl font-bold ${openIndex === index ? "text-black" : "text-gray-800"}`}>
+                  {q.question}
+                </h3>
+                
+                {/* Animated Icon */}
+                <div className={`
+                  w-8 h-8 rounded-full flex items-center justify-center border transition-all duration-300
+                  ${openIndex === index ? "bg-black border-black rotate-180" : "bg-white border-white/50"}
+                `}>
+                  <svg 
+                    className={`w-4 h-4 ${openIndex === index ? "text-lime-400" : "text-black"}`} 
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Answer (Animated Height) */}
+              <div 
+                className={`
+                  transition-all duration-300 ease-in-out
+                  ${openIndex === index ? "max-h-48 opacity-100 pb-8 px-8" : "max-h-0 opacity-0 px-8"}
+                `}
+              >
+                <p className="text-gray-600 leading-relaxed text-lg">
+                  {q.answer}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Features.tsx ===
+export default function Features() {
+  return (
+    <section className="w-full px-2 font-liquid text-black">
+      <div className="max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        {/* Card 1: Speed */}
+        <div className="md:col-span-2 bg-white border border-white rounded-[2rem] p-8 md:p-10 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-lime-300 rounded-full blur-3xl opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+          <h2 className="text-4xl md:text-5xl font-bold mb-4 relative z-10">Instant Flow.</h2>
+          <p className="text-xl text-gray-600 max-w-sm relative z-10">
+            Messages delivered faster than you can blink. Zero latency, 100% fluid.
+          </p>
+          {/* Abstract Graphic */}
+          <div className="mt-8 flex gap-3">
+             <div className="h-12 w-32 bg-gray-100 rounded-full animate-pulse"></div>
+             <div className="h-12 w-12 bg-lime-400 rounded-full animate-bounce"></div>
+          </div>
+        </div>
+
+        {/* Card 2: Security */}
+        <div className="bg-white/20 backdrop-blur-sm border border-white/50 rounded-[2rem] p-8 md:p-10 flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute bottom-[-20px] right-[-20px] text-9xl opacity-10 rotate-12">🔒</div>
+          <div>
+            <h2 className="text-4xl font-bold mb-2">Secure.</h2>
+            <p className="text-gray-800">End-to-end encryption that feels invisible.</p>
+          </div>
+          <div className="mt-8 bg-white/40 p-4 rounded-xl border border-white/40 backdrop-blur-md">
+            <div className="flex items-center gap-2">
+               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+               <span className="text-xs font-bold uppercase tracking-wider">Protected</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Media */}
+        <div className="bg-gray-900 text-white border border-gray-800 rounded-[2rem] p-8 md:p-10 relative overflow-hidden">
+           <h2 className="text-4xl font-bold mb-4">Media Rich.</h2>
+           <p className="text-gray-400 mb-6">Share your world in high definition.</p>
+           
+           {/* Abstract Floating Images */}
+           <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-blue-400 rounded-xl rotate-12 border-2 border-gray-900 z-10"></div>
+           <div className="absolute bottom-8 -right-8 w-24 h-24 bg-lime-400 rounded-xl -rotate-12 border-2 border-gray-900"></div>
+        </div>
+
+        {/* Card 4: Community */}
+        <div className="md:col-span-2 bg-white border border-white rounded-[2rem] p-8 md:p-10 flex items-center justify-between overflow-hidden relative">
+           <div className="relative z-10">
+              <h2 className="text-4xl md:text-5xl font-bold mb-2">Open Source.</h2>
+              <p className="text-xl text-gray-600">Built by the community, for the community.</p>
+           </div>
+           <div className="hidden md:flex gap-2 absolute right-8 opacity-50">
+              {[1,2,3].map((i) => (
+                <div key={i} className={`w-16 h-48 bg-gray-100 rounded-full transform ${i%2===0 ? 'translate-y-4' : '-translate-y-4'}`}></div>
+              ))}
+           </div>
+        </div>
+
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Footer.tsx ===
+import { Link } from "react-router-dom";
+
+export default function Footer() {
+  return (
+    <footer className="w-full px-2 pb-2 font-liquid">
+      <div className="max-w-[1440px] mx-auto bg-black text-lime-300 rounded-[2rem] p-8 md:p-12 overflow-hidden relative">
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
+          
+          {/* Brand */}
+          <div className="space-y-4">
+             <div className="flex items-center gap-2">
+                <div className="h-8 w-8 bg-lime-400 rounded-full animate-bounce"></div>
+                <span className="text-3xl font-bold tracking-tight text-white">Chatar</span>
+             </div>
+             <p className="text-gray-400 max-w-xs">
+               The fluid way to connect. Built for speed, designed for humans.
+             </p>
+          </div>
+
+          {/* Simple Links */}
+          <div className="flex gap-8 text-sm font-medium text-white/80">
+            <Link to="#" className="hover:text-lime-400 transition-colors">Privacy</Link>
+            <Link to="#" className="hover:text-lime-400 transition-colors">Twitter</Link>
+            <Link to="#" className="hover:text-lime-400 transition-colors">Github</Link>
+            <Link to="#" className="hover:text-lime-400 transition-colors">Contact</Link>
+          </div>
+        </div>
+
+        {/* Big Text Bottom */}
+        <div className="mt-12 pt-8 border-t border-white/10 text-center md:text-left flex justify-between items-end">
+           <span className="text-[12vw] leading-none font-bold text-white/5 select-none pointer-events-none absolute bottom-[-20px] left-0">
+             LIQUID
+           </span>
+           <span className="relative z-10 text-xs text-gray-500">© 2024 Chatar Inc. All rights reserved.</span>
+        </div>
+
+      </div>
+    </footer>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Hero.tsx ===
+import { Link } from "react-router-dom";
+
+export default function Hero() {
+  return (
+    <section className="w-full px-2 py-4 font-liquid text-black">
+      <div className="max-w-[1440px] mx-auto space-y-4">
+        
+        <div className="bg-white/20 backdrop-blur-sm border border-white rounded-[2rem] p-8 md:p-12 text-center relative overflow-hidden">
+          
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-1000"></div>
+
+          {/* Text Content */}
+          <div className="relative z-10 flex flex-col items-center">
+            <span className="inline-block py-1 px-3 rounded-full bg-white border border-gray-200 text-xs font-bold tracking-wide uppercase mb-4 text-gray-800">
+              v1.0 is live
+            </span>
+            
+            <h1 className="text-6xl md:text-9xl font-bold leading-[0.85] mb-6 tracking-tight">
+              Liquid <br />
+              Connect.
+            </h1>
+            
+            <p className="text-gray-800 text-lg md:text-xl leading-relaxed max-w-md mx-auto font-medium tracking-wider">
+              Experience the fluid way to chat. Real-time messaging with a design that flows.
+            </p>
+          </div>
+        </div>
+
+        {/* Bottom Card: Visual / Mockup */}
+        <div className="bg-white border border-white rounded-[2rem] p-4 h-64 md:h-80 relative overflow-hidden flex items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100">
+          
+          {/* Abstract Chat Bubbles */}
+          <div className="absolute top-8 left-8 bg-blue-500 text-white p-4 rounded-2xl rounded-tl-none shadow-lg transform -rotate-2 max-w-[200px] z-10 border-2 border-white">
+            <p className="text-xl">Hey! 👋</p>
+          </div>
+          
+          <div className="absolute top-24 right-8 bg-gray-900 text-white p-4 rounded-2xl rounded-tr-none shadow-lg transform rotate-3 max-w-[220px] z-20 border-2 border-white">
+             <p className="text-xl">Loving this design!</p>
+          </div>
+
+          <img
+            src="/icons/favicon.png"
+            alt="logo"
+            className="h-44 md:h-56 w-auto"
+          />
+
+          <div className="absolute bottom-12 left-12 bg-white text-gray-900 p-4 rounded-2xl rounded-bl-none shadow-lg transform -rotate-1 max-w-[200px] z-10 border border-gray-200">
+             <p className="text-xl">It's so liquid... 💧</p>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Navbar.tsx ===
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
+import { Link } from "react-router-dom";
+
+export default function Navbar() {
+  return (
+    <nav className="sticky top-0 z-50 p-2 font-liquid text-gray-900">
+      <div className="max-w-xl w-full mx-auto p-2 flex justify-between items-center border border-white/50 bg-white/20 backdrop-blur-md rounded-3xl shadow-sm">
+
+        <Link to="/" className="flex items-center gap-2 group pl-2">
+          <img
+            src="/icons/favicon.png"
+            alt="logo"
+            className="h-6 md:h-8 w-auto group-hover:scale-110 transition-transform duration-200"
+          />
+          <span className="-mb-1 text-2xl md:text-3xl tracking-tight">
+            Chatar
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="bg-white px-5 py-2 rounded-2xl hover:bg-gray-50 active:scale-95 transition-all cursor-pointer text-sm border border-gray-100 shadow-sm">
+                Sign in
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="bg-white px-5 py-2 rounded-2xl hover:bg-gray-50 active:scale-95 transition-all cursor-pointer text-sm border border-gray-100 shadow-sm">
+                Sign up
+              </button>
+            </SignUpButton>
+          </SignedOut>
+
+          <SignedIn>
+            <UserButton
+              appearance={{
+                elements: {
+                  userButtonAvatarBox: "h-10 w-10",
+                }
+              }}
+            />
+            <Link to={"/chat"}>
+              <div className="flex items-center gap-2 bg-white/45 px-2 py-1 rounded-full border border-white/40">
+                <span className="hidden sm:block text-xs font-medium text-gray-800">
+                  Start Chating
+                </span>
+              </div>
+            </Link>
+          </SignedIn>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Pricing.tsx ===
+import { SignedOut, SignInButton, PricingTable } from "@clerk/clerk-react";
+import { Link } from "react-router-dom";
+
+export default function Pricing() {
+  return (
+    <section className="w-full px-2 py-4 font-liquid text-black">
+      <div className="max-w-[1440px] mx-auto">
+        {/* Header */}
+        <div className="text-center mb-10 space-y-2">
+          <h2 className="text-4xl md:text-6xl font-bold">Flow Plans</h2>
+          <p className="text-gray-600 text-lg">Choose the liquidity that fits your needs.</p>
+        </div>
+
+        <div className="max-w-7xl mx-auto">
+          <PricingTable
+            appearance={{
+              elements: {
+                card: {
+                  backgroundColor: 'rgba(255, 255, 255, 0.4)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.6)',
+                  borderRadius: '2rem',
+                },
+              }
+            }}
+            fallback={<div className="text-center text-gray-600">Loading Flow Plans...</div>}
+            for="user"
+          />
+        </div>
+
+        {/*
+          IMPORTANT:
+          You will likely remove your custom pricing cards now that you're using <PricingTable />.
+          The commented-out section below is your original custom UI.
+          If you want to keep elements like the "Start Free" button for non-signed-in users,
+          you'll need to decide how to integrate that logic, or rely on Clerk's component
+          to handle sign-in prompts if a user tries to subscribe while signed out.
+        */}
+
+        {/* Original custom pricing cards (commented out or removed) */}
+        {/*
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl mx-auto">
+          <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-[2rem] p-8 md:p-12 flex flex-col justify-between relative hover:bg-white/50 transition-colors duration-300">
+            <div>
+              <div className="inline-block px-3 py-1 bg-white/60 rounded-full text-xs font-bold uppercase tracking-wider mb-4 text-gray-600">
+                Starter
+              </div>
+              <h3 className="text-5xl font-bold mb-2">$0</h3>
+              <p className="text-gray-600 mb-8">Perfect for dipping your toes in.</p>
+              <ul className="space-y-4 mb-8">
+                {['Unlimited Messages', '5 Group Chats', '100MB File Sharing', 'Standard Support'].map((feature) => (
+                  <li key={feature} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center shadow-sm">
+                      <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <span className="text-gray-800 font-medium">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="w-full py-4 bg-white rounded-2xl font-bold text-black border border-white/50 shadow-sm hover:scale-[1.02] active:scale-95 transition-all">
+                  Start Free
+                </button>
+              </SignInButton>
+            </SignedOut>
+            <button className="w-full py-4 bg-white rounded-2xl font-bold text-black border border-white/50 shadow-sm hover:scale-[1.02] active:scale-95 transition-all hidden">
+              Current Plan
+            </button>
+          </div>
+
+          <div className="bg-black text-white border border-gray-800 rounded-[2rem] p-8 md:p-12 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute top-[-50%] right-[-50%] w-full h-full bg-lime-400/20 rounded-full blur-3xl animate-pulse"></div>
+            <div className="absolute bottom-[-20%] left-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
+            <div className="relative z-10">
+              <div className="flex justify-between items-start mb-4">
+                <div className="inline-block px-3 py-1 bg-lime-400 text-black rounded-full text-xs font-bold uppercase tracking-wider">
+                  Pro Liquid
+                </div>
+                <span className="text-xs font-bold text-gray-400 tracking-wider uppercase">Most Popular</span>
+              </div>
+              <h3 className="text-5xl font-bold mb-2">
+                $9<span className="text-2xl text-gray-400 font-normal">/mo</span>
+              </h3>
+              <p className="text-gray-400 mb-8">Unleash the full flow. No limits.</p>
+              <ul className="space-y-4 mb-8">
+                {[
+                  'Unlimited Everything',
+                  '4K Media Uploads',
+                  'Custom Chat Themes',
+                  'Priority "Liquid" Support',
+                  'Early Access to Features'
+                ].map((feature) => (
+                  <li key={feature} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-lime-400 flex items-center justify-center">
+                      <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <span className="text-gray-200 font-medium">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Link to={"/payment-getted"}>
+              <button className="relative z-10 w-full py-4 bg-lime-400 text-black rounded-2xl font-bold hover:bg-lime-300 hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_20px_rgba(163,230,53,0.3)]">
+                Go Pro
+              </button>
+            </Link>
+          </div>
+        </div>
+        */}
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Stats.tsx ===
+export default function Stats() {
+  return (
+    <section className="w-full px-2 py-4 font-liquid text-black">
+      <div className="max-w-[1440px] mx-auto">
+        <div className="bg-lime-200/50 border border-white/40 rounded-[2rem] p-6 md:p-12 overflow-hidden relative">
+          
+          <div className="flex flex-col md:flex-row justify-between items-center gap-8 md:gap-4 text-center md:text-left">
+            
+            {/* Stat 1 */}
+            <div className="relative group cursor-default">
+              <h3 className="text-6xl md:text-8xl font-bold tracking-tighter group-hover:scale-110 transition-transform duration-300">
+                10k<span className="text-lime-600">+</span>
+              </h3>
+              <p className="text-lg uppercase tracking-widest font-bold opacity-60 mt-2">Active Users</p>
+            </div>
+
+            {/* Divider (Visual) */}
+            <div className="hidden md:block w-px h-24 bg-black/10 rotate-12"></div>
+
+            {/* Stat 2 */}
+            <div className="relative group cursor-default">
+              <h3 className="text-6xl md:text-8xl font-bold tracking-tighter group-hover:scale-110 transition-transform duration-300 delay-75">
+                0ms
+              </h3>
+              <p className="text-lg uppercase tracking-widest font-bold opacity-60 mt-2">Perceived Latency</p>
+            </div>
+
+            {/* Divider (Visual) */}
+            <div className="hidden md:block w-px h-24 bg-black/10 rotate-12"></div>
+
+            {/* Stat 3 */}
+            <div className="relative group cursor-default">
+              <h3 className="text-6xl md:text-8xl font-bold tracking-tighter group-hover:scale-110 transition-transform duration-300 delay-150">
+                100<span className="text-lime-600">%</span>
+              </h3>
+              <p className="text-lg uppercase tracking-widest font-bold opacity-60 mt-2">Liquid Design</p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\components\Testimonials.tsx ===
+export default function Testimonials() {
+  return (
+    <section className="w-full px-2 font-liquid text-black">
+      <div className="max-w-[1440px] mx-auto">
+        
+        {/* Container: Looks like a glass chat window */}
+        <div className="bg-white/20 backdrop-blur-md border border-white/40 rounded-[2rem] p-6 md:p-12 relative overflow-hidden">
+          
+          {/* Header */}
+          <div className="text-center mb-12">
+            <h2 className="text-4xl md:text-6xl font-bold mb-4">The Community Chat</h2>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/50 rounded-full text-sm font-bold uppercase tracking-wider text-gray-800">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              5,400+ people online
+            </div>
+          </div>
+
+          {/* Chat Stream Layout */}
+          <div className="flex flex-col space-y-6 max-w-3xl mx-auto relative z-10">
+
+            {/* Review 1: Left (Incoming Message) */}
+            <div className="flex items-end gap-3 justify-start">
+              <div className="w-10 h-10 rounded-full bg-blue-400 border-2 border-white flex-shrink-0"></div>
+              <div className="flex flex-col gap-1 max-w-[85%] md:max-w-[70%]">
+                <span className="text-xs font-bold text-gray-700 ml-2">Alex M.</span>
+                <div className="bg-white p-5 rounded-3xl rounded-bl-none shadow-sm border border-white/50">
+                  <p className="text-lg">Honest review? I deleted WhatsApp. The UI on Chatar is just too clean to ignore. 💧</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Review 2: Right (Outgoing/Self Message - styled differently for contrast) */}
+            <div className="flex items-end gap-3 justify-end">
+              <div className="flex flex-col gap-1 items-end max-w-[85%] md:max-w-[70%]">
+                <span className="text-xs font-bold text-gray-700 mr-2">Sarah J. (Designer)</span>
+                <div className="bg-gray-900 text-white p-5 rounded-3xl rounded-br-none shadow-lg">
+                  <p className="text-lg">As a designer, the "liquid" aesthetics are spot on. It doesn't feel like a utility, it feels like a toy (in a good way!).</p>
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-purple-400 border-2 border-white flex-shrink-0"></div>
+            </div>
+
+            {/* Review 3: Left (Incoming Message) */}
+            <div className="flex items-end gap-3 justify-start">
+              <div className="w-10 h-10 rounded-full bg-orange-400 border-2 border-white flex-shrink-0"></div>
+              <div className="flex flex-col gap-1 max-w-[85%] md:max-w-[70%]">
+                <span className="text-xs font-bold text-gray-700 ml-2">Dev_Mike</span>
+                <div className="bg-white p-5 rounded-3xl rounded-bl-none shadow-sm border border-white/50">
+                  <p className="text-lg">Zero latency. I don't know how you guys optimized the sockets, but it flies.</p>
+                </div>
+                {/* Reaction Simulation */}
+                <div className="flex -mt-4 ml-4 relative z-10">
+                   <div className="bg-gray-100 border border-white rounded-full px-2 py-1 text-xs shadow-sm">🔥 12</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Background Decor to keep the "Liquid" feel */}
+          <div className="absolute top-1/4 left-10 w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-10 w-64 h-64 bg-pink-300 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-pulse delay-700"></div>
+
+        </div>
+      </div>
+    </section>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\index.css ===
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Liquid Asi";
+  src: url("assets/fonts/liquid-asi.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Coolvetica";
+  src: url("assets/fonts/coolvetica.otf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --font-liquid: "Liquid Asi";
+  --font-coolvetica: "Coolvetica";
+}
+
+@theme inline {
+  --font-liquid: var(--font-liquid);
+  --font-coolvetica: var(--font-coolvetica);
+}
+
+
+body {
+  padding: 0;
+  margin: 0;
+}
+
+=== D:\vite\liquid-chatar\src\main.tsx ===
+// src/main.tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App.tsx";
+import "./index.css";
+import { ClerkProvider, useAuth } from "@clerk/clerk-react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ConvexReactClient } from "convex/react";
+import { BrowserRouter } from "react-router-dom";
+
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
+      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
+  </React.StrictMode>,
+);
+
+=== D:\vite\liquid-chatar\src\pages\Chat.tsx ===
+import { UserButton } from "@clerk/clerk-react";
+import { useState } from "react";
+
+export default function Chat() {
+  const [message, setMessage] = useState("");
+
+  // Mock data for UI visualization
+  const users = [
+    { id: 1, name: "Alice", online: true },
+    { id: 2, name: "Bob", online: false },
+    { id: 3, name: "Charlie", online: true },
+  ];
+
+  const messages = [
+    { id: 1, text: "Hey! How's the new Liquid UI?", sender: "Alice", isMe: false },
+    { id: 2, text: "It's flowing perfectly! 🌊", sender: "Me", isMe: true },
+    { id: 3, text: "The lime green is a nice touch.", sender: "Alice", isMe: false },
+  ];
+
+  return (
+    <div className="bg-lime-400 h-screen w-full p-2 font-liquid flex items-center justify-center">
+      
+      {/* Main Glass Container */}
+      <div className="w-full h-full bg-white/90 backdrop-blur-xl rounded-[2rem] overflow-hidden flex shadow-2xl border border-white/50 relative">
+        
+        {/* Sidebar (Users) */}
+        <aside className="w-20 md:w-80 bg-gray-50/50 border-r border-gray-100 flex flex-col justify-between p-4">
+          
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 bg-lime-400 rounded-full flex items-center justify-center animate-pulse">
+               <img src="/icons/favicon.png" alt="logo" className="w-6 h-6" />
+            </div>
+            <span className="hidden md:block text-2xl font-bold tracking-tight">Chatar</span>
+          </div>
+
+          {/* User List */}
+          <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 hidden md:block pl-2">
+              Online Now
+            </div>
+            
+            {users.map((user) => (
+              <div key={user.id} className="group flex items-center gap-3 p-3 rounded-2xl hover:bg-white hover:shadow-sm cursor-pointer transition-all">
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-gray-200 to-gray-100 border border-white"></div>
+                  {user.online && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+                  )}
+                </div>
+                <div className="hidden md:block">
+                  <p className="font-bold text-sm text-gray-800">{user.name}</p>
+                  <p className="text-xs text-gray-400 truncate w-32">
+                    {user.online ? "Active now" : "Offline"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* User Profile (Bottom) */}
+          <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-3 justify-center md:justify-start">
+            <UserButton 
+              appearance={{
+                elements: {
+                  userButtonAvatarBox: "w-10 h-10 border-2 border-white shadow-sm"
+                }
+              }}
+            />
+            <div className="hidden md:block">
+              <p className="text-xs font-bold text-gray-500">My Account</p>
+            </div>
+          </div>
+        </aside>
+
+
+        {/* Main Chat Area */}
+        <main className="flex-1 flex flex-col relative bg-white/30">
+          
+          {/* Chat Header */}
+          <header className="h-16 border-b border-gray-100 flex items-center justify-between px-6 bg-white/50 backdrop-blur-sm sticky top-0 z-10">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <h2 className="font-bold text-gray-800">General Chat</h2>
+            </div>
+            <div className="text-xs font-medium px-3 py-1 bg-lime-100 text-lime-800 rounded-full">
+              Live
+            </div>
+          </header>
+
+          {/* Messages List */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {messages.map((msg) => (
+              <div 
+                key={msg.id} 
+                className={`flex ${msg.isMe ? "justify-end" : "justify-start"}`}
+              >
+                <div className={`max-w-md ${msg.isMe ? "order-1" : "order-2"}`}>
+                  <div 
+                    className={`
+                      px-6 py-3 rounded-3xl text-sm font-medium shadow-sm relative
+                      ${msg.isMe 
+                        ? "bg-black text-white rounded-br-none" 
+                        : "bg-white text-gray-800 border border-gray-100 rounded-bl-none"
+                      }
+                    `}
+                  >
+                    {msg.text}
+                  </div>
+                  <span className={`text-[10px] text-gray-400 mt-1 block ${msg.isMe ? "text-right" : "text-left"}`}>
+                    10:42 AM
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 bg-white/80 border-t border-gray-100">
+            <form 
+              onSubmit={(e) => { e.preventDefault(); setMessage(""); }} 
+              className="flex items-center gap-2 bg-gray-100/50 p-2 rounded-[1rem] border border-gray-200 focus-within:ring-2 focus-within:ring-lime-400 transition-all"
+            >
+              <button type="button" className="p-3 rounded-full hover:bg-gray-200 text-gray-500 transition-colors">
+                <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>
+              </button>
+              
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Type your liquid message..."
+                className="flex-1 bg-transparent border-none focus:outline-none text-gray-800 placeholder-gray-400 h-10"
+              />
+              
+              <button 
+                type="submit" 
+                className="p-3 bg-lime-400 rounded-full text-black hover:scale-105 active:scale-95 transition-transform shadow-sm"
+              >
+                <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
+              </button>
+            </form>
+          </div>
+
+        </main>
+
+      </div>
+    </div>
+  );
+}
+
+=== D:\vite\liquid-chatar\src\pages\Home.tsx ===
+import Navbar from "../components/Navbar";
+import Hero from "../components/Hero";
+import Features from "../components/Features";
+import Stats from "../components/Stats";
+import Pricing from "../components/Pricing";
+import Testimonials from "../components/Testimonials";
+import FAQ from "../components/FAQ"; // Import New Section
+import CallToAction from "../components/CallToAction";
+import Footer from "../components/Footer";
+
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useUser } from "@clerk/clerk-react";
+
+function UserProfile() {
+  const { user } = useUser();
+  const userData = useQuery(api.users.getUserByClerkId, {
+    clerkId: user?.id || "",
+  });
+
+  return (
+    <div className="bg-white p-4 rounded-lg shadow-md mb-4 z-[99]">
+      {userData && (
+        <div>
+          <p>Name: {userData.firstName} {userData.lastName}</p>
+          <p>Email: {userData.email}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Home() {
+
+  return (
+    <div className="bg-lime-400 text-black p-2">
+      <div className="w-full min-h-screen bg-lime-300 rounded-2xl overflow-hidden relative pb-2">
+        <Navbar />
+        <UserProfile />
+        
+        <div className="flex flex-col gap-4">
+          <Hero />
+          <Features />
+          <Stats />
+          <Pricing />
+          <FAQ />
+          <Testimonials />
+          <CallToAction />
+          <Footer />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+=== D:\vite\liquid-chatar\vite.config.ts ===
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    tailwindcss()
+  ],
+})
+
+

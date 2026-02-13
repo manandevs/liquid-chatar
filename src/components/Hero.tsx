@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 export default function Hero() {
   return (
     <section className="w-full px-2 py-4 font-liquid text-black">
-      <div className="max-w-7xl mx-auto space-y-4">
+      <div className="max-w-[1440px] mx-auto space-y-4">
         
         <div className="bg-white/20 backdrop-blur-sm border border-white rounded-[2rem] p-8 md:p-12 text-center relative overflow-hidden">
           
@@ -40,7 +40,7 @@ export default function Hero() {
           </div>
 
           <img
-            src="/icons/favicon.svg"
+            src="/icons/favicon.png"
             alt="logo"
             className="h-44 md:h-56 w-auto"
           />
