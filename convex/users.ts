@@ -1,6 +1,5 @@
-// convex/users.ts
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, query, type QueryCtx } from "./_generated/server";
 
 // Simple "create only" mutation (used if you want separate create/update)
 export const createUser = internalMutation({
@@ -114,3 +113,31 @@ export const getUserByClerkId = query({
       .unique();
   },
 });
+
+// --- New Helpers ---
+
+export const current = query({
+  args: {},
+  handler: async (ctx) => {
+    return await getCurrentUser(ctx);
+  },
+});
+
+export async function getCurrentUser(ctx: QueryCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) {
+    return null;
+  }
+  return await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .unique();
+}
+
+export async function getCurrentUserOrThrow(ctx: QueryCtx) {
+  const user = await getCurrentUser(ctx);
+  if (!user) {
+    throw new Error("Could not find user in database");
+  }
+  return user;
+}
