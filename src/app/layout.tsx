@@ -1,13 +1,36 @@
-import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
 import clsx from "clsx";
-import "./globals.css";
+import type { Metadata } from "next";
+import { Geist } from "next/font/google";
 
-const dmSans = DM_Sans({ subsets: ["latin"] });
+import "./globals.css";
+import Navbar from "@/components/layouts/Navbar";
+
+const geist = Geist({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans",
+  fallback: [
+    "Inter",
+    "-apple-system",
+    "BlinkMacSystemFont",
+    "Segoe UI",
+    "Roboto",
+    "Oxygen",
+    "Ubuntu",
+    "Cantarell",
+    "Fira Sans",
+    "Droid Sans",
+    "Helvetica Neue",
+    "sans-serif",
+  ],
+});
+
 
 export const metadata: Metadata = {
-  title: "Saas Template - EldoraUI",
-  description: "Template for saas applications with dark theme",
+  title: "LiquidChatar - Real-time AI Chat Workspace",
+  description:
+    "Real-time AI chat workspace built for fluid, intelligent team collaboration.",
+  icons: ["/favicon.webp"],
 };
 
 export default function RootLayout({
@@ -17,7 +40,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={clsx(dmSans.className, "antialiased")}>{children}</body>
+      <body className={clsx(geist.className, "antialiased")}>
+        <Navbar />
+        {children}
+      </body>
     </html>
   );
 }
