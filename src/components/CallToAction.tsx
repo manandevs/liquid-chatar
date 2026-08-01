@@ -1,36 +1,42 @@
-import { SignUpButton } from "@clerk/clerk-react";
+"use client"
+import HelixImage from '../assets/images/helix2.png'
+import EmojiImage from '../assets/images/emojistar.png'
+import Image from 'next/image';
+import { motion, useScroll, useTransform } from 'framer-motion';
+import { use, useRef } from 'react';
 
-export default function CallToAction() {
+export const CallToAction = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start end", "end end"]
+  })
+
+  const translateY = useTransform(scrollYProgress, [0, 1], [50, -50]);
+  
   return (
-    <section className="w-full px-2 py-4 pb-8 font-liquid text-black">
-      <div className="max-w-[1440px] mx-auto">
-        
-        <div className="bg-white rounded-[2rem] p-12 md:p-24 text-center relative overflow-hidden shadow-sm border border-white">
-          
-          {/* Background Blobs */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-lime-300 rounded-full mix-blend-multiply filter blur-[64px] opacity-40 animate-pulse"></div>
-          
-          <div className="relative z-10 flex flex-col items-center justify-center space-y-8">
-            <h2 className="text-5xl md:text-8xl font-bold tracking-tight">
-              Ready to get <br />
-              <span className="text-lime-500 selection:bg-black selection:text-white">Liquid?</span>
-            </h2>
-            
-            <p className="text-xl md:text-2xl text-gray-500 max-w-lg">
-              Join the new wave of messaging. No clutter, just flow.
-            </p>
+    <div className="bg-black text-white py-[72px] sm:py-24" ref={containerRef}>
+      
+      <div className="container max-w-xl relative">
+      <motion.div style={{translateY}}>
+      <Image src={HelixImage} alt="helix" className="absolute top-6 left-[calc(100%+36px)]" />
+      </motion.div>
+      <motion.div style={{translateY}}>
+       
+      <Image src={EmojiImage} alt="emoji" className="absolute -top-[120px] right-[calc(100%+30px)]" />
+      </motion.div>
+       
 
-            <SignUpButton mode="modal">
-              <button className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-black rounded-2xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 hover:scale-105 active:scale-95 cursor-pointer">
-                Get Started Now
-                <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            </SignUpButton>
-          </div>
-
-        </div>
-
+        <h2 className="font-bold text-5xl sm:text-6xl tracking-tighter">Get Instant Access</h2>
+        <p className="text-xl text-white/70  mt-5">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Explicabo, veritatis? Omnis minima quisquam error accusamus?</p>
+        <form className="mt-10 flex flex-col gap-2.5 max-w-sm mx-auto sm:flex-row">
+          <input type="email" placeholder="karthikmudunuri999@gmail.com" className="h-12 bg-white/20 rounded-lg px-5 font-medium placeholder:text-[#9CA3AF] sm:flex-1"/>
+          <button className="bg-white text-black h-12 rounded-lg px-5">Get access</button>
+        </form>
       </div>
-    </section>
-  );
-}
+
+
+    </div>
+  )
+};

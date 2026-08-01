@@ -1,57 +1,65 @@
-import { Link } from "react-router-dom";
+"use client";
+import CursorImage from "../assets/images/cursor.png";
+import ArrowIcon from "../assets/icons/arrow-w.svg";
+import MessageImage from "../assets/images/message.png";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { AnimatedGradientTextDemo } from "./animatedtext";
 
-export default function Hero() {
+export const Hero = () => {
   return (
-    <section className="w-full px-2 py-4 font-liquid text-black">
-      <div className="max-w-[1440px] mx-auto space-y-4">
-        
-        <div className="bg-white/20 backdrop-blur-sm border border-white rounded-[2rem] p-8 md:p-12 text-center relative overflow-hidden">
-          
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-1000"></div>
-
-          {/* Text Content */}
-          <div className="relative z-10 flex flex-col items-center">
-            <span className="inline-block py-1 px-3 rounded-full bg-white border border-gray-200 text-xs font-bold tracking-wide uppercase mb-4 text-gray-800">
-              v1.0 is live
-            </span>
-            
-            <h1 className="text-6xl md:text-9xl font-bold leading-[0.85] mb-6 tracking-tight">
-              Liquid <br />
-              Connect.
+    <div className="bg-black text-white bg-[linear-gradient(to_bottom,#000,#200D42_34%,#4F21A1_65%,#A46EDB_82%)] py-[72px] sm:py-24 relative overflow-x-hidden">
+      <div className="absolute h-[375px] w-[750px] sm:w-[1536px] sm:h-[768px] lg:w-[2400px] llg:h-[800px] rounded-[100%] bg-black left-1/2 -translate-x-1/2 border border-[#B48CDE] bg-[radial-gradient(closest-side,#000_82%,#9560EB)] top-[calc(100%-96px)] sm:top-[calc(100%-120px)]"></div>
+      <div className="container relative">
+ 
+        <div className="flex justify-center mt-8 ">
+          <div className="inline-flex relative">
+            <h1 className="text-7xl sm:text-9xl font-bold tracking-tightner text-center inline-flex">
+              Eldora UI <br /> is more
             </h1>
-            
-            <p className="text-gray-800 text-lg md:text-xl leading-relaxed max-w-md mx-auto font-medium tracking-wider">
-              Experience the fluid way to chat. Real-time messaging with a design that flows.
-            </p>
+            <motion.div
+              className="absolute right-[478px] top-[108px] hidden sm:inline"
+              drag
+              dragSnapToOrigin
+            >
+              <Image
+                src={CursorImage}
+                alt="cursor"
+                height={200}
+                width={200}
+                className="max-w-none"
+                draggable="false"
+              />
+            </motion.div>
+            <motion.div
+              className="absolute left-[498px] top-[56px] hidden sm:inline"
+              drag
+              dragSnapToOrigin
+            >
+              <Image
+                src={MessageImage}
+                alt="cursor"
+                height={200}
+                width={200}
+                className="max-w-none"
+                draggable="false"
+              />
+            </motion.div>
           </div>
         </div>
-
-        {/* Bottom Card: Visual / Mockup */}
-        <div className="bg-white border border-white rounded-[2rem] p-4 h-64 md:h-80 relative overflow-hidden flex items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100">
-          
-          {/* Abstract Chat Bubbles */}
-          <div className="absolute top-8 left-8 bg-blue-500 text-white p-4 rounded-2xl rounded-tl-none shadow-lg transform -rotate-2 max-w-[200px] z-10 border-2 border-white">
-            <p className="text-xl">Hey! 👋</p>
-          </div>
-          
-          <div className="absolute top-24 right-8 bg-gray-900 text-white p-4 rounded-2xl rounded-tr-none shadow-lg transform rotate-3 max-w-[220px] z-20 border-2 border-white">
-             <p className="text-xl">Loving this design!</p>
-          </div>
-
-          <img
-            src="/icons/favicon.png"
-            alt="logo"
-            className="h-44 md:h-56 w-auto"
-          />
-
-          <div className="absolute bottom-12 left-12 bg-white text-gray-900 p-4 rounded-2xl rounded-bl-none shadow-lg transform -rotate-1 max-w-[200px] z-10 border border-gray-200">
-             <p className="text-xl">It's so liquid... 💧</p>
-          </div>
-
+        <div className="flex justify-center">
+          <p className="text-xl text-center mt-8 max-w-md">
+            Lorem ipsum dolor sit amet, consectetur adipisicing elit. Fugit quod
+            dicta, nisi autem dignissimos consequatur? Unde saepe eius nam.
+            Minima at quaerat non quae qui consequatur hic nam neque earum.
+          </p>
         </div>
-
+        <div className="flex justify-center mt-8">
+          <button className="bg-white text-black py-3 px-5 rounded-lg font-medium">
+            Get for free
+          </button>
+        </div>
       </div>
-    </section>
+    </div>
   );
-}
+};

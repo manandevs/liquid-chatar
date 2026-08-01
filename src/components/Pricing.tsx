@@ -1,119 +1,122 @@
-import { SignedOut, SignInButton, PricingTable } from "@clerk/clerk-react";
-import { Link } from "react-router-dom";
+'use client'
 
-export default function Pricing() {
+import { useState } from 'react'
+
+interface PricingTabProps {
+  yearly: boolean
+  popular?: boolean
+  planName: string
+  price: {
+    monthly: number
+    yearly: number
+  }
+  planDescription: string
+  features: string[]
+}
+
+export function PricingTab(props: PricingTabProps) {
   return (
-    <section className="w-full px-2 py-4 font-liquid text-black">
-      <div className="max-w-[1440px] mx-auto">
-        {/* Header */}
-        <div className="text-center mb-10 space-y-2">
-          <h2 className="text-4xl md:text-6xl font-bold">Flow Plans</h2>
-          <p className="text-gray-600 text-lg">Choose the liquidity that fits your needs.</p>
-        </div>
-
-        <div className="max-w-7xl mx-auto">
-          <PricingTable
-            appearance={{
-              elements: {
-                card: {
-                  backgroundColor: 'rgba(255, 255, 255, 0.4)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255, 255, 255, 0.6)',
-                  borderRadius: '2rem',
-                },
-              }
-            }}
-            fallback={<div className="text-center text-gray-600">Loading Flow Plans...</div>}
-            for="user"
-          />
-        </div>
-
-        {/*
-          IMPORTANT:
-          You will likely remove your custom pricing cards now that you're using <PricingTable />.
-          The commented-out section below is your original custom UI.
-          If you want to keep elements like the "Start Free" button for non-signed-in users,
-          you'll need to decide how to integrate that logic, or rely on Clerk's component
-          to handle sign-in prompts if a user tries to subscribe while signed out.
-        */}
-
-        {/* Original custom pricing cards (commented out or removed) */}
-        {/*
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl mx-auto">
-          <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-[2rem] p-8 md:p-12 flex flex-col justify-between relative hover:bg-white/50 transition-colors duration-300">
-            <div>
-              <div className="inline-block px-3 py-1 bg-white/60 rounded-full text-xs font-bold uppercase tracking-wider mb-4 text-gray-600">
-                Starter
-              </div>
-              <h3 className="text-5xl font-bold mb-2">$0</h3>
-              <p className="text-gray-600 mb-8">Perfect for dipping your toes in.</p>
-              <ul className="space-y-4 mb-8">
-                {['Unlimited Messages', '5 Group Chats', '100MB File Sharing', 'Standard Support'].map((feature) => (
-                  <li key={feature} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center shadow-sm">
-                      <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <span className="text-gray-800 font-medium">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="w-full py-4 bg-white rounded-2xl font-bold text-black border border-white/50 shadow-sm hover:scale-[1.02] active:scale-95 transition-all">
-                  Start Free
-                </button>
-              </SignInButton>
-            </SignedOut>
-            <button className="w-full py-4 bg-white rounded-2xl font-bold text-black border border-white/50 shadow-sm hover:scale-[1.02] active:scale-95 transition-all hidden">
-              Current Plan
-            </button>
+    <div className={`h-full `}>
+      <div className="relative flex flex-col h-full p-6 rounded-2xl bg-black border border-white/30 shadow shadow-black/80">
+        {props.popular && (
+          <div className="absolute top-0 right-0 mr-6 -mt-4">
+            <div className="inline-flex items-center text-xs font-semibold py-1.5 px-3 bg-emerald-500 text-white rounded-full shadow-sm shadow-slate-950/5">Most Popular</div>
           </div>
-
-          <div className="bg-black text-white border border-gray-800 rounded-[2rem] p-8 md:p-12 flex flex-col justify-between relative overflow-hidden group">
-            <div className="absolute top-[-50%] right-[-50%] w-full h-full bg-lime-400/20 rounded-full blur-3xl animate-pulse"></div>
-            <div className="absolute bottom-[-20%] left-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-4">
-                <div className="inline-block px-3 py-1 bg-lime-400 text-black rounded-full text-xs font-bold uppercase tracking-wider">
-                  Pro Liquid
-                </div>
-                <span className="text-xs font-bold text-gray-400 tracking-wider uppercase">Most Popular</span>
-              </div>
-              <h3 className="text-5xl font-bold mb-2">
-                $9<span className="text-2xl text-gray-400 font-normal">/mo</span>
-              </h3>
-              <p className="text-gray-400 mb-8">Unleash the full flow. No limits.</p>
-              <ul className="space-y-4 mb-8">
-                {[
-                  'Unlimited Everything',
-                  '4K Media Uploads',
-                  'Custom Chat Themes',
-                  'Priority "Liquid" Support',
-                  'Early Access to Features'
-                ].map((feature) => (
-                  <li key={feature} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-lime-400 flex items-center justify-center">
-                      <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <span className="text-gray-200 font-medium">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <Link to={"/payment-getted"}>
-              <button className="relative z-10 w-full py-4 bg-lime-400 text-black rounded-2xl font-bold hover:bg-lime-300 hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_20px_rgba(163,230,53,0.3)]">
-                Go Pro
-              </button>
-            </Link>
+        )}
+        <div className="mb-5">
+          <div className="text-white/70 font-semibold mb-1">{props.planName}</div>
+          <div className="inline-flex items-baseline mb-2">
+            <span className="text-white/70 font-bold text-3xl">$</span>
+            <span className="text-white/50 font-bold text-4xl">{props.yearly ? props.price.yearly : props.price.monthly}</span>
+            <span className="text-white/70 font-medium">/mo</span>
           </div>
+          <div className="text-sm text-white/70 mb-5">{props.planDescription}</div>
+          <a className="w-full inline-flex justify-center whitespace-nowrap rounded-lg bg-[#5D2CA8] px-3.5 py-2.5 text-sm font-medium text-white shadow-sm shadow-indigo-950/10 hover:bg-[#5D2CA2] focus-visible:outline-none focus-visible:ring focus-visible:ring-slate-600 transition-colors duration-150" href="#0">
+            Purchase Plan
+          </a>
         </div>
-        */}
+        <div className="text-slate-200 font-medium mb-3">Includes:</div>
+        <ul className="text-slate-400 text-sm space-y-3 grow">
+          {props.features.map((feature, index) => {
+            return (
+              <li key={index} className="flex items-center">
+                <svg className="w-3 h-3 fill-emerald-500 mr-3 shrink-0" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10.28 2.28L3.989 8.575 1.695 6.28A1 1 0 00.28 7.695l3 3a1 1 0 001.414 0l7-7A1 1 0 0010.28 2.28z" />
+                </svg>
+                <span>{feature}</span>
+              </li>
+            )
+          })}
+        </ul>
       </div>
-    </section>
-  );
+    </div>
+  )
+}
+
+export default function PricingTable() {
+  const [isAnnual, setIsAnnual] = useState<boolean>(true)
+
+  return (
+    <div>
+
+      {/* Pricing toggle */}
+      <div className="flex justify-center max-w-[14rem] m-auto mb-8 lg:mb-16">
+        <div className="relative flex w-full p-1 bg-black rounded-full">
+          <span className="absolute inset-0 m-1 pointer-events-none" aria-hidden="true">
+            <span className={`absolute inset-0 w-1/2 bg-[#5D2CA8] rounded-full shadow-sm shadow-[#5D2CA8] transform transition-transform duration-150 ease-in-out ${isAnnual ? 'translate-x-0' : 'translate-x-full'}`}></span>
+          </span>
+          <button className={`relative flex-1 text-sm font-medium h-8 rounded-full focus-visible:outline-none focus-visible:ring focus-visible:ring-slate-600 transition-colors duration-150 ease-in-out ${isAnnual ? 'text-white/70' : ' text-white'}`} onClick={() => setIsAnnual(true)} aria-pressed={isAnnual}>Yearly <span className={`${isAnnual ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>-20%</span></button>
+          <button className={`relative flex-1 text-sm font-medium h-8 rounded-full focus-visible:outline-none focus-visible:ring focus-visible:ring-slate-600 transition-colors duration-150 ease-in-out ${isAnnual ? 'text-white/70' : ' text-white'}`} onClick={() => setIsAnnual(false)} aria-pressed={isAnnual}>Monthly</button>
+        </div>
+      </div>
+
+      <div className="max-w-sm mx-auto grid gap-6 lg:grid-cols-3 items-start lg:max-w-none">
+
+        {/* Pricing tab 1 */}
+        <PricingTab
+          yearly={isAnnual}
+          planName="Essential"
+          price={{ yearly: 29, monthly: 35 }}
+          planDescription="There are many variations available, but the majority have suffered."
+          features={[
+            'Unlimited placeholder texts',
+            'Consectetur adipiscing elit',
+            'Excepteur sint occaecat cupidatat',
+            'Officia deserunt mollit anim',
+          ]} />
+
+        {/* Pricing tab 2 */}
+        <PricingTab
+          yearly={isAnnual}
+          popular={true}
+          planName="Perform"
+          price={{ yearly: 49, monthly: 55 }}
+          planDescription="There are many variations available, but the majority have suffered."
+          features={[
+            'Unlimited placeholder texts',
+            'Consectetur adipiscing elit',
+            'Excepteur sint occaecat cupidatat',
+            'Officia deserunt mollit anim',
+            'Predefined chunks as necessary',
+          ]} />
+
+        {/* Pricing tab 3 */}
+        <PricingTab
+          yearly={isAnnual}
+          planName="Enterprise"
+          price={{ yearly: 79, monthly: 85 }}
+          planDescription="There are many variations available, but the majority have suffered."
+          features={[
+            'Unlimited placeholder texts',
+            'Consectetur adipiscing elit',
+            'Excepteur sint occaecat cupidatat',
+            'Officia deserunt mollit anim',
+            'Predefined chunks as necessary',
+            'Free from repetition',
+          ]} />
+
+      </div>
+
+    </div>
+  )
 }

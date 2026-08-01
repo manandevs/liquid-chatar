@@ -1,54 +1,43 @@
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
-import { Link } from "react-router-dom";
+import Image from "next/image";
+import Menu from "../assets/icons/menu.svg";
+
+const links = ["About", "Features", "Updates", "Help", "Customers"];
 
 export default function Navbar() {
   return (
-    <nav className="sticky top-0 z-50 p-2 font-liquid text-gray-900">
-      <div className="max-w-xl w-full mx-auto p-2 flex justify-between items-center border border-white/50 bg-white/20 backdrop-blur-md rounded-3xl shadow-sm">
-
-        <Link to="/" className="flex items-center gap-2 group pl-2">
-          <img
-            src="/icons/favicon.png"
-            alt="logo"
-            className="h-6 md:h-8 w-auto group-hover:scale-110 transition-transform duration-200"
+    <header className="bg-black px-4">
+      <div className="container flex items-center justify-between py-4">
+        <div className="relative">
+          <div className="absolute inset-x-0 top-2 bottom-0 bg-[linear-gradient(to_right,#F7AABE,#B57CEC,#E472D1)] blur-md" />
+          <Image
+            src={"/favicon.webp"}
+            alt="favicon"
+            width={100}
+            height={100}
+            className="relative mt-1 size-12"
           />
-          <span className="-mb-1 text-2xl md:text-3xl tracking-tight">
-            Chatar
-          </span>
-        </Link>
-
-        <div className="flex items-center gap-2">
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button className="bg-white px-5 py-2 rounded-2xl hover:bg-gray-50 active:scale-95 transition-all cursor-pointer text-sm border border-gray-100 shadow-sm">
-                Sign in
-              </button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <button className="bg-white px-5 py-2 rounded-2xl hover:bg-gray-50 active:scale-95 transition-all cursor-pointer text-sm border border-gray-100 shadow-sm">
-                Sign up
-              </button>
-            </SignUpButton>
-          </SignedOut>
-
-          <SignedIn>
-            <UserButton
-              appearance={{
-                elements: {
-                  userButtonAvatarBox: "h-10 w-10",
-                }
-              }}
-            />
-            <Link to={"/chat"}>
-              <div className="flex items-center gap-2 bg-white/45 px-2 py-1 rounded-full border border-white/40">
-                <span className="hidden sm:block text-xs font-medium text-gray-800">
-                  Start Chating
-                </span>
-              </div>
-            </Link>
-          </SignedIn>
         </div>
+
+        <button className="inline-flex size-10 items-center justify-center rounded-lg border border-white/30 sm:hidden">
+          <Menu className="text-white" />
+        </button>
+
+        <nav className="hidden items-center gap-6 sm:flex">
+          {links.map((link) => (
+            <a
+              key={link}
+              href="#"
+              className="text-white/60 transition hover:text-white"
+            >
+              {link}
+            </a>
+          ))}
+
+          <button className="rounded-lg bg-white px-4 py-2 text-black">
+            Get for free
+          </button>
+        </nav>
       </div>
-    </nav>
+    </header>
   );
 }
